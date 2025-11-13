@@ -354,6 +354,11 @@ static FD *decompose_rhs_unitary(FD *fds, int nfds, int *nf_out)
 static int lhs_can_be_reduced(FD *unit, int nunit, int idx, int attr_bit)
 {
   attrset original_lhs = unit[idx].lhs;
+
+  // ⚠️ Não permitir que o LHS fique vazio (uma FD ∅ -> X não é válida)
+  if (__builtin_popcount(original_lhs) <= 1)
+    return 0;
+
   attrset test_lhs = original_lhs & ~(1u << attr_bit);
   attrset res = test_lhs;
   int changed = 1;
@@ -469,8 +474,6 @@ static attrset *compute_candidate_keys(attrset U, FD *fds, int nfds, int *out_nk
     all_rhs |= fds[i].rhs;
   attrset essentials = U & ~all_rhs;
 
-  // lista de todos atributos em U
-  attrset attrs = U;
   // prepare candidate attributes to try adding (attrs_not_essentials)
   attrset remaining = U & ~essentials;
 

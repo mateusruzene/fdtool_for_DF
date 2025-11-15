@@ -1,2 +1,0 @@
-R = {A,B,C,D}
-F = { A->BC, B->C, A->B, AB->D }

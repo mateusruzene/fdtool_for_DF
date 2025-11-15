@@ -1,7 +1,7 @@
 #ifndef MINCOVER_H
 #define MINCOVER_H
 
-#include "parser.h" // for attrset and FD
+#include "parser.h"
 
 // Computes the minimum cover of a set of functional dependencies.
 // Returns a newly allocated array of FDs.

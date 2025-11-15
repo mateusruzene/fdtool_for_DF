@@ -6,13 +6,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// Utility: checks whether set A is subset of set B
 static int is_subset(attrset A, attrset B)
 {
   return (A & B) == A;
 }
 
-// Print attribute set compactly (ABC) – reimplemented locally to keep file independent
 static void print_attrset(attrset s)
 {
   for (int i = 0; i < 26; ++i)
@@ -20,13 +18,9 @@ static void print_attrset(attrset s)
       putchar('A' + i);
 }
 
-// ------------------------------------------------------------
-// Normal Form Checking (BCNF and 3NF)
-// ------------------------------------------------------------
 void check_normal_forms(attrset U, FD *fds, int nfds)
 {
 
-  // --- Step 1: Minimum cover (unitary)
   int nmin = 0;
   FD *min = compute_minimum_cover(fds, nfds, &nmin);
 
@@ -36,7 +30,6 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
     return;
   }
 
-  // --- Step 2: Compute keys and prime attributes
   int nkeys = 0;
   attrset *keys = compute_candidate_keys(U, min, nmin, &nkeys);
 
@@ -44,21 +37,19 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
   for (int i = 0; i < nkeys; ++i)
     prime_attrs |= keys[i];
 
-  // --- Step 3: Check BCNF and 3NF
   int bcnf_ok = 1;
   int bcnf_viol_count = 0;
 
   int nf3_ok = 1;
   int nf3_viol_count = 0;
 
-  // First pass: count violations
   for (int i = 0; i < nmin; ++i)
   {
     attrset L = min[i].lhs;
     attrset R = min[i].rhs;
 
     if (is_subset(R, L))
-      continue; // trivial FD
+      continue;
 
     attrset Lplus = compute_closure(L, min, nmin);
     int L_superkey = is_subset(U, Lplus);
@@ -70,7 +61,6 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
       nf3_ok = 0, nf3_viol_count++;
   }
 
-  // --- Step 4: Print BCNF result
   if (bcnf_ok)
   {
     printf("BCNF: OK\n");
@@ -97,7 +87,6 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
     }
   }
 
-  // --- Step 5: Print 3NF result
   if (nf3_ok)
   {
     printf("3NF: OK\n");
@@ -127,7 +116,6 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
     }
   }
 
-  // --- Cleanup
   free(min);
   free(keys);
 }

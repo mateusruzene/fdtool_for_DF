@@ -1,11 +1,6 @@
 #include "closure.h"
 #include <stdio.h>
 
-// ---------------------------------------------------------
-// compute_closure
-// Computes X+ using the standard iterative algorithm:
-// Keep adding RHS attributes when LHS is contained in the closure.
-// ---------------------------------------------------------
 attrset compute_closure(attrset X, FD *fds, int nfds)
 {
   attrset closure = X;
@@ -20,7 +15,6 @@ attrset compute_closure(attrset X, FD *fds, int nfds)
       attrset L = fds[i].lhs;
       attrset R = fds[i].rhs;
 
-      // If L ⊆ closure, add RHS
       if ((closure & L) == L)
       {
         attrset new_bits = R & ~closure;

@@ -51,7 +51,7 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
     if (is_subset(R, L))
       continue;
 
-    attrset Lplus = compute_closure(L, min, nmin);
+    attrset Lplus = computeClosure(L, min, nmin);
     int L_superkey = is_subset(U, Lplus);
     int R_prime = is_subset(R, prime_attrs);
 
@@ -76,7 +76,7 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
       if (is_subset(R, L))
         continue;
 
-      attrset Lplus = compute_closure(L, min, nmin);
+      attrset Lplus = computeClosure(L, min, nmin);
       if (!is_subset(U, Lplus))
       {
         print_attrset(L);
@@ -102,7 +102,7 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
       if (is_subset(R, L))
         continue;
 
-      attrset Lplus = compute_closure(L, min, nmin);
+      attrset Lplus = computeClosure(L, min, nmin);
       int L_superkey = is_subset(U, Lplus);
       int R_prime = is_subset(R, prime_attrs);
 

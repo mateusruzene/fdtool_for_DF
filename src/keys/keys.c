@@ -31,7 +31,7 @@ attrset *compute_candidate_keys(attrset U, FD *fds, int nfds, int *out_n)
   {
     attrset cur = queue[qhead++];
 
-    attrset curplus = compute_closure(cur, fds, nfds);
+    attrset curplus = computeClosure(cur, fds, nfds);
 
     if ((curplus & U) == U)
     {

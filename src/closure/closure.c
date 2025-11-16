@@ -1,7 +1,8 @@
 #include "closure.h"
 #include <stdio.h>
 
-attrset compute_closure(attrset X, FD *fds, int nfds)
+// Retorna o fecho X+ de X sob F
+attrset computeClosure(attrset X, FD *fds, int nfds)
 {
   attrset closure = X;
   int changed = 1;
@@ -12,15 +13,15 @@ attrset compute_closure(attrset X, FD *fds, int nfds)
 
     for (int i = 0; i < nfds; ++i)
     {
-      attrset L = fds[i].lhs;
-      attrset R = fds[i].rhs;
-
-      if ((closure & L) == L)
+      // Se LHS está contido no fecho
+      if ((closure & fds[i].lhs) == fds[i].lhs)
       {
-        attrset new_bits = R & ~closure;
-        if (new_bits)
+        // atributos de RHS que ainda não foram incluídos no fecho
+        attrset missing = fds[i].rhs & (~closure);
+
+        if (missing != 0)
         {
-          closure |= new_bits;
+          closure |= missing;
           changed = 1;
         }
       }

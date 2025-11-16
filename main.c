@@ -61,7 +61,7 @@ int main(int argc, char **argv)
       return 1;
 
     attrset X = attrset_from_string(xstr);
-    attrset Xplus = compute_closure(X, fds, nfds);
+    attrset Xplus = computeClosure(X, fds, nfds);
     print_attrset_compact(Xplus);
     printf("\n");
     return 0;

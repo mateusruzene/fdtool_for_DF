@@ -3,9 +3,6 @@
 
 #include "parser.h"
 
-// Computes the minimum cover of a set of functional dependencies.
-// Returns a newly allocated array of FDs.
-// The result has unitary RHS, reduced LHS, and no redundant FDs.
-FD *compute_minimum_cover(FD *fds, int nfds, int *out_n);
+FD *computeMinimumCover(FD *fds, int nfds, int *out_n);
 
 #endif

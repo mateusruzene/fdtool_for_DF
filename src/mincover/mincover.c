@@ -4,184 +4,228 @@
 #include <stdio.h>
 #include <string.h>
 
-static FD *decompose_rhs(FD *fds, int nfds, int *out_n)
+/* -----------------------------------------------------------------------------
+   PASSO 1 — Decompor o lado direito (RHS)
+   Uma dependência X -> ABC precisa ser transformada em três dependências:
+       X -> A
+       X -> B
+       X -> C
+   Isso garante que cada FD tenha apenas 1 atributo no RHS.
+ ----------------------------------------------------------------------------- */
+static FD *decomposeRhs(FD *fds, int fdCount, int *outCount)
 {
-  int count = 0;
-  for (int i = 0; i < nfds; ++i)
+  int rhsAtomCount = 0;
+
+  /* Conta quantos atributos individuais existem no RHS de todas as FDs */
+  for (int i = 0; i < fdCount; ++i)
     for (int b = 0; b < 26; ++b)
       if (fds[i].rhs & (1u << b))
-        count++;
+        rhsAtomCount++;
 
-  if (count == 0)
+  if (rhsAtomCount == 0)
   {
-    *out_n = 0;
+    *outCount = 0;
     return NULL;
   }
 
-  FD *unit = malloc(sizeof(FD) * count);
-  if (!unit)
+  /* Aloca espaço para todas as dependências unitárias */
+  FD *unitaryFds = malloc(sizeof(FD) * rhsAtomCount);
+  if (!unitaryFds)
   {
-    *out_n = 0;
+    *outCount = 0;
     return NULL;
   }
-  int k = 0;
 
-  for (int i = 0; i < nfds; ++i)
+  int index = 0;
+
+  /* Cria as dependências X -> A, X -> B, X -> C... */
+  for (int i = 0; i < fdCount; ++i)
   {
     for (int b = 0; b < 26; ++b)
     {
       if (fds[i].rhs & (1u << b))
       {
-        unit[k].lhs = fds[i].lhs;
-        unit[k].rhs = (1u << b);
-        k++;
+        unitaryFds[index].lhs = fds[i].lhs;
+        unitaryFds[index].rhs = (1u << b);
+        index++;
       }
     }
   }
 
-  *out_n = count;
-  return unit;
+  *outCount = rhsAtomCount;
+  return unitaryFds;
 }
 
-static int lhs_reducible(FD *set, int n, int idx, int bit)
+/* -----------------------------------------------------------------------------
+   PASSO 2 — Verificar se um atributo do LHS é estranho (redundante)
+   Um atributo é estranho se, ao removê-lo, o fecho ainda determinar o RHS.
+ ----------------------------------------------------------------------------- */
+static int lhsAttributeIsRedundant(FD *fdSet, int fdCount, int targetIndex, int bit)
 {
-  attrset original = set[idx].lhs;
+  attrset originalLhs = fdSet[targetIndex].lhs;
 
-  if (__builtin_popcount(original) <= 1)
+  /* Não pode reduzir se só há um atributo no LHS */
+  if (__builtin_popcount(originalLhs) <= 1)
     return 0;
 
-  attrset reduced = original & ~(1u << bit);
-  attrset closure = reduced;
+  /* Remove o atributo candidato e calcula fecho */
+  attrset reducedLhs = originalLhs & ~(1u << bit);
+  attrset closure = reducedLhs;
 
   int changed = 1;
   while (changed)
   {
     changed = 0;
-    for (int i = 0; i < n; ++i)
-    {
-      attrset L = set[i].lhs;
 
-      if ((closure & L) == L)
+    for (int i = 0; i < fdCount; ++i)
+    {
+      attrset lhs = fdSet[i].lhs;
+
+      if ((closure & lhs) == lhs)
       {
-        attrset add = set[i].rhs & ~closure;
-        if (add)
+        attrset newAttributes = fdSet[i].rhs & ~closure;
+        if (newAttributes)
         {
-          closure |= add;
+          closure |= newAttributes;
           changed = 1;
         }
       }
     }
   }
 
-  return (closure & set[idx].rhs) == set[idx].rhs;
+  /* Se o fecho ainda determina o RHS, o atributo é estranho */
+  return (closure & fdSet[targetIndex].rhs) == fdSet[targetIndex].rhs;
 }
 
-static int fd_redundant_with_keep(FD *set, int n, int idx, const char *keep)
+/* -----------------------------------------------------------------------------
+   PASSO 3 — Verificar se uma FD é redundante
+   Testa se X -> A pode ser removida sem alterar o conjunto de implicações.
+   Usa a máscara "keepMask" para ignorar dependências já removidas.
+ ----------------------------------------------------------------------------- */
+static int fdIsRedundant(FD *fdSet, int fdCount, int targetIndex, const char *keepMask)
 {
-  attrset closure = set[idx].lhs;
+  attrset closure = fdSet[targetIndex].lhs;
+
   int changed = 1;
   while (changed)
   {
     changed = 0;
-    for (int j = 0; j < n; ++j)
+
+    for (int j = 0; j < fdCount; ++j)
     {
-      if (j == idx)
+      if (j == targetIndex)
         continue;
-      if (!keep[j])
+      if (!keepMask[j])
         continue;
 
-      if ((closure & set[j].lhs) == set[j].lhs)
+      if ((closure & fdSet[j].lhs) == fdSet[j].lhs)
       {
-        attrset add = set[j].rhs & ~closure;
-        if (add)
+        attrset newAttributes = fdSet[j].rhs & ~closure;
+        if (newAttributes)
         {
-          closure |= add;
+          closure |= newAttributes;
           changed = 1;
         }
       }
     }
   }
-  return (closure & set[idx].rhs) == set[idx].rhs;
+
+  /* Se o fecho obtiver o RHS, então a FD era redundante */
+  return (closure & fdSet[targetIndex].rhs) == fdSet[targetIndex].rhs;
 }
 
-FD *compute_minimum_cover(FD *fds, int nfds, int *out_n)
+/* -----------------------------------------------------------------------------
+   ALGORITMO COMPLETO — Cobertura Mínima
+   1) Decompor RHS
+   2) Remover atributos estranhos do LHS
+   3) Remover dependências redundantes
+ ----------------------------------------------------------------------------- */
+FD *computeMinimumCover(FD *fds, int fdCount, int *outCount)
 {
-  int nunit = 0;
-  FD *unit = decompose_rhs(fds, nfds, &nunit);
-  if (nunit == 0 || unit == NULL)
+  /* 1) Decompor RHS */
+  int unitaryCount = 0;
+  FD *unitaryFds = decomposeRhs(fds, fdCount, &unitaryCount);
+
+  if (unitaryCount == 0 || unitaryFds == NULL)
   {
-    *out_n = 0;
-    if (unit)
-      free(unit);
+    *outCount = 0;
+    if (unitaryFds)
+      free(unitaryFds);
     return NULL;
   }
 
-  int loop_changed = 1;
-  while (loop_changed)
+  /* 2) Remover atributos estranhos do LHS */
+  int changed = 1;
+  while (changed)
   {
-    loop_changed = 0;
-    for (int i = 0; i < nunit; ++i)
+    changed = 0;
+
+    for (int i = 0; i < unitaryCount; ++i)
     {
-      attrset lhs = unit[i].lhs;
+      attrset lhs = unitaryFds[i].lhs;
+
       for (int b = 0; b < 26; ++b)
       {
         if (lhs & (1u << b))
         {
-          if (lhs_reducible(unit, nunit, i, b))
+          if (lhsAttributeIsRedundant(unitaryFds, unitaryCount, i, b))
           {
-            unit[i].lhs &= ~(1u << b);
-            loop_changed = 1;
-            lhs = unit[i].lhs;
+            unitaryFds[i].lhs &= ~(1u << b);
+            changed = 1;
+            lhs = unitaryFds[i].lhs;
           }
         }
       }
     }
   }
 
-  char *keep = malloc(nunit);
-  if (!keep)
+  /* 3) Remover dependências redundantes */
+  char *keepMask = malloc(unitaryCount);
+  if (!keepMask)
   {
-    free(unit);
-    *out_n = 0;
+    free(unitaryFds);
+    *outCount = 0;
     return NULL;
   }
-  for (int i = 0; i < nunit; ++i)
-    keep[i] = 1;
 
-  for (int i = 0; i < nunit; ++i)
+  for (int i = 0; i < unitaryCount; ++i)
+    keepMask[i] = 1;
+
+  for (int i = 0; i < unitaryCount; ++i)
   {
-    if (!keep[i])
+    if (!keepMask[i])
       continue;
-    if (fd_redundant_with_keep(unit, nunit, i, keep))
-    {
-      keep[i] = 0;
-    }
+
+    if (fdIsRedundant(unitaryFds, unitaryCount, i, keepMask))
+      keepMask[i] = 0;
   }
 
-  int kept = 0;
-  for (int i = 0; i < nunit; ++i)
-    if (keep[i])
-      kept++;
+  /* Conta quantas dependências restaram */
+  int keptCount = 0;
+  for (int i = 0; i < unitaryCount; ++i)
+    if (keepMask[i])
+      keptCount++;
 
-  FD *result = malloc(sizeof(FD) * kept);
+  FD *result = malloc(sizeof(FD) * keptCount);
   if (!result)
   {
-    free(unit);
-    free(keep);
-    *out_n = 0;
+    free(unitaryFds);
+    free(keepMask);
+    *outCount = 0;
     return NULL;
   }
-  int k = 0;
-  for (int i = 0; i < nunit; ++i)
+
+  /* Constrói a cobertura mínima final */
+  int index = 0;
+  for (int i = 0; i < unitaryCount; ++i)
   {
-    if (keep[i])
-    {
-      result[k++] = unit[i];
-    }
+    if (keepMask[i])
+      result[index++] = unitaryFds[i];
   }
 
-  free(unit);
-  free(keep);
-  *out_n = kept;
+  free(unitaryFds);
+  free(keepMask);
+
+  *outCount = keptCount;
   return result;
 }

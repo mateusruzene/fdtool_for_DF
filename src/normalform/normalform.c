@@ -22,7 +22,7 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
 {
 
   int nmin = 0;
-  FD *min = compute_minimum_cover(fds, nfds, &nmin);
+  FD *min = computeMinimumCover(fds, nfds, &nmin);
 
   if (nmin == 0)
   {

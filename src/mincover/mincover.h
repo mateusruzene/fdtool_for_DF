@@ -3,6 +3,6 @@
 
 #include "parser.h"
 
-FD *computeMinimumCover(FD *fds, int nfds, int *out_n);
+FD *computeMinimumCover(FD *fds, int fdCount, int *outCount);
 
 #endif

@@ -6,7 +6,10 @@
 #include <stdio.h>
 #include <string.h>
 
-static void print_usage(const char *prog)
+/* ------------------------------------------------------------
+   Exibe instruções de uso do programa
+------------------------------------------------------------ */
+static void printUsage(const char *programName)
 {
   fprintf(stderr,
           "Usage:\n"
@@ -14,165 +17,169 @@ static void print_usage(const char *prog)
           "  %s mincover   --fds <file.fds>\n"
           "  %s keys       --fds <file.fds>\n"
           "  %s normalform --fds <file.fds>\n",
-          prog, prog, prog, prog);
+          programName, programName, programName, programName);
 }
 
+/* ------------------------------------------------------------
+   Função principal: interpreta comandos e chama os módulos
+------------------------------------------------------------ */
 int main(int argc, char **argv)
 {
   if (argc < 2)
   {
-    print_usage(argv[0]);
+    printUsage(argv[0]);
     return 1;
   }
 
-  const char *cmd = argv[1];
+  const char *command = argv[1];
 
-  /* -------------------------------------------------- */
-  /* Fecho */
-  /* -------------------------------------------------- */
-  if (strcmp(cmd, "closure") == 0)
+  /* --------------------------------------------------------
+     Comando: CLOSURE
+  -------------------------------------------------------- */
+  if (strcmp(command, "closure") == 0)
   {
-    const char *fds_path = NULL;
-    const char *xstr = NULL;
+    const char *fdsPath = NULL;
+    const char *xString = NULL;
 
     for (int i = 2; i < argc; ++i)
     {
       if (strcmp(argv[i], "--fds") == 0 && i + 1 < argc)
-        fds_path = argv[++i];
+        fdsPath = argv[++i];
       else if (strcmp(argv[i], "--X") == 0 && i + 1 < argc)
-        xstr = argv[++i];
+        xString = argv[++i];
       else
       {
-        print_usage(argv[0]);
+        printUsage(argv[0]);
         return 1;
       }
     }
 
-    if (!fds_path || !xstr)
+    if (!fdsPath || !xString)
     {
-      print_usage(argv[0]);
+      printUsage(argv[0]);
       return 1;
     }
 
-    attrset U = 0;
-    int nfds = 0;
-    FD *fds = parse_fds_file(fds_path, &U, &nfds);
+    attrset universe = 0;
+    int fdCount = 0;
+    FD *fds = parseFdsFile(fdsPath, &universe, &fdCount);
     if (!fds)
       return 1;
 
-    attrset X = attrset_from_string(xstr);
-    attrset Xplus = computeClosure(X, fds, nfds);
-    print_attrset_compact(Xplus);
+    attrset X = attrsetFromString(xString);
+    attrset closure = computeClosure(X, fds, fdCount);
+
+    printAttrsetCompact(closure);
     printf("\n");
     return 0;
   }
 
-  /* -------------------------------------------------- */
-  /* Cobertura mínima */
-  /* -------------------------------------------------- */
-  else if (strcmp(cmd, "mincover") == 0)
+  /* --------------------------------------------------------
+     Comando: MINCOVER
+  -------------------------------------------------------- */
+  else if (strcmp(command, "mincover") == 0)
   {
-    const char *fds_path = NULL;
+    const char *fdsPath = NULL;
 
     for (int i = 2; i < argc; ++i)
     {
       if (strcmp(argv[i], "--fds") == 0 && i + 1 < argc)
-        fds_path = argv[++i];
+        fdsPath = argv[++i];
       else
       {
-        print_usage(argv[0]);
+        printUsage(argv[0]);
         return 1;
       }
     }
 
-    attrset U = 0;
-    int nfds = 0;
-    FD *fds = parse_fds_file(fds_path, &U, &nfds);
+    attrset universe = 0;
+    int fdCount = 0;
+    FD *fds = parseFdsFile(fdsPath, &universe, &fdCount);
     if (!fds)
       return 1;
 
-    int nmin = 0;
-    FD *min = computeMinimumCover(fds, nfds, &nmin);
+    int minCount = 0;
+    FD *minCover = computeMinimumCover(fds, fdCount, &minCount);
 
-    for (int i = 0; i < nmin; ++i)
+    for (int i = 0; i < minCount; ++i)
     {
-      print_attrset_compact(min[i].lhs);
+      printAttrsetCompact(minCover[i].lhs);
       printf("->");
-      print_attrset_compact(min[i].rhs);
+      printAttrsetCompact(minCover[i].rhs);
       printf("\n");
     }
     return 0;
   }
 
-  /* -------------------------------------------------- */
-  /* Chaves */
-  /* -------------------------------------------------- */
-  else if (strcmp(cmd, "keys") == 0)
+  /* --------------------------------------------------------
+     Comando: KEYS
+  -------------------------------------------------------- */
+  else if (strcmp(command, "keys") == 0)
   {
-    const char *fds_path = NULL;
+    const char *fdsPath = NULL;
 
     for (int i = 2; i < argc; ++i)
     {
       if (strcmp(argv[i], "--fds") == 0 && i + 1 < argc)
-        fds_path = argv[++i];
+        fdsPath = argv[++i];
       else
       {
-        print_usage(argv[0]);
+        printUsage(argv[0]);
         return 1;
       }
     }
 
-    attrset U = 0;
-    int nfds = 0;
-    FD *fds = parse_fds_file(fds_path, &U, &nfds);
+    attrset universe = 0;
+    int fdCount = 0;
+    FD *fds = parseFdsFile(fdsPath, &universe, &fdCount);
     if (!fds)
       return 1;
 
-    int nmin = 0;
-    FD *min = computeMinimumCover(fds, nfds, &nmin);
+    int minCount = 0;
+    FD *minCover = computeMinimumCover(fds, fdCount, &minCount);
 
-    int nkeys = 0;
-    attrset *keys = computeCandidateKeys(U, min, nmin, &nkeys);
+    int keyCount = 0;
+    attrset *keys = computeCandidateKeys(universe, minCover, minCount, &keyCount);
 
-    for (int i = 0; i < nkeys; ++i)
+    for (int i = 0; i < keyCount; ++i)
     {
-      print_attrset_compact(keys[i]);
+      printAttrsetCompact(keys[i]);
       printf("\n");
     }
     return 0;
   }
 
-  /* -------------------------------------------------- */
-  /* Forma normal */
-  /* -------------------------------------------------- */
-  else if (strcmp(cmd, "normalform") == 0)
+  /* --------------------------------------------------------
+     Comando: NORMALFORM
+  -------------------------------------------------------- */
+  else if (strcmp(command, "normalform") == 0)
   {
-    const char *fds_path = NULL;
+    const char *fdsPath = NULL;
 
     for (int i = 2; i < argc; ++i)
     {
       if (strcmp(argv[i], "--fds") == 0 && i + 1 < argc)
-        fds_path = argv[++i];
+        fdsPath = argv[++i];
       else
       {
-        print_usage(argv[0]);
+        printUsage(argv[0]);
         return 1;
       }
     }
 
-    attrset U = 0;
-    int nfds = 0;
-    FD *fds = parse_fds_file(fds_path, &U, &nfds);
+    attrset universe = 0;
+    int fdCount = 0;
+    FD *fds = parseFdsFile(fdsPath, &universe, &fdCount);
     if (!fds)
       return 1;
 
-    check_normal_forms(U, fds, nfds);
+    checkNormalForms(universe, fds, fdCount);
     return 0;
   }
 
-  /* -------------------------------------------------- */
-  /* Comando desconhecido */
-  /* -------------------------------------------------- */
-  print_usage(argv[0]);
+  /* --------------------------------------------------------
+     Comando desconhecido
+  -------------------------------------------------------- */
+  printUsage(argv[0]);
   return 1;
 }

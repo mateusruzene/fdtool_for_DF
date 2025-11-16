@@ -3,14 +3,14 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-attrset *computeCandidateKeys(attrset universe, FD *fds, int fdCount, int *outCount)
+attrset *computeCandidateKeys(attrset U, FD *fds, int fdCount, int *outCount)
 {
   attrset allRhsAttributes = 0;
   for (int i = 0; i < fdCount; ++i)
     allRhsAttributes |= fds[i].rhs;
 
-  attrset essentialAttributes = universe & ~allRhsAttributes;
-  attrset remainingAttributes = universe & ~essentialAttributes;
+  attrset essentialAttributes = U & ~allRhsAttributes;
+  attrset remainingAttributes = U & ~essentialAttributes;
 
   int queueCapacity = 256;
   attrset *queue = malloc(sizeof(attrset) * queueCapacity);
@@ -39,7 +39,7 @@ attrset *computeCandidateKeys(attrset universe, FD *fds, int fdCount, int *outCo
     /* --------------------------------------------------
        Se o fecho é superchave → possível chave candidata
     -------------------------------------------------- */
-    if ((closureOfCurrent & universe) == universe)
+    if ((closureOfCurrent & U) == U)
     {
       int isMinimal = 1;
 

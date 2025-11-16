@@ -4,7 +4,8 @@
 #include <string.h>
 #include <ctype.h>
 
-static int char_to_index(char c)
+// Converte um caractere (A–Z ou a–z) em índice 0–25
+static int charToIndex(char c)
 {
   if (c >= 'A' && c <= 'Z')
     return c - 'A';
@@ -13,28 +14,31 @@ static int char_to_index(char c)
   return -1;
 }
 
-attrset attrset_from_string(const char *s)
+// Converte uma string (ex: "ABC") em um attrset (bitmask)
+attrset attrsetFromString(const char *s)
 {
   attrset result = 0;
+
   for (size_t i = 0; s[i]; ++i)
   {
-    int idx = char_to_index(s[i]);
+    int idx = charToIndex(s[i]);
     if (idx >= 0 && idx < 26)
       result |= (1u << idx);
   }
+
   return result;
 }
 
-void print_attrset_compact(attrset s)
+// Imprime attrset na forma compacta (ex: 0101 -> AC)
+void printAttrsetCompact(attrset set)
 {
   for (int i = 0; i < 26; ++i)
-  {
-    if (s & (1u << i))
+    if (set & (1u << i))
       putchar('A' + i);
-  }
 }
 
-static char *read_file(const char *path)
+// Lê um arquivo inteiro para memória
+static char *readFile(const char *path)
 {
   FILE *f = fopen(path, "rb");
   if (!f)
@@ -44,49 +48,60 @@ static char *read_file(const char *path)
   long size = ftell(f);
   fseek(f, 0, SEEK_SET);
 
-  char *buf = malloc(size + 1);
-  if (!buf)
+  char *buffer = malloc(size + 1);
+  if (!buffer)
   {
     fclose(f);
     return NULL;
   }
 
-  fread(buf, 1, size, f);
-  buf[size] = '\0';
+  fread(buffer, 1, size, f);
+  buffer[size] = '\0';
+
   fclose(f);
-  return buf;
+  return buffer;
 }
 
-static char *strip_ws(const char *s)
+// Remove todos os espaços em branco (útil para parsing)
+static char *removeWhitespace(const char *s)
 {
-  size_t n = strlen(s);
-  char *out = malloc(n + 1);
+  size_t length = strlen(s);
+  char *clean = malloc(length + 1);
   size_t j = 0;
 
-  for (size_t i = 0; i < n; ++i)
+  for (size_t i = 0; i < length; ++i)
     if (!isspace((unsigned char)s[i]))
-      out[j++] = s[i];
+      clean[j++] = s[i];
 
-  out[j] = '\0';
-  return out;
+  clean[j] = '\0';
+  return clean;
 }
 
-static char *extract_braced(const char *buf, const char *prefix)
+/* ---------------------------------------------------------------
+   Extrai o conteúdo de algo no formato PREFIX { conteúdo }
+   Ex: U={ABC} → retorna "ABC"
+---------------------------------------------------------------- */
+static char *extractBraced(const char *buffer, const char *prefix)
 {
-  const char *p = strstr(buf, prefix);
+  const char *p = strstr(buffer, prefix);
   if (!p)
     return NULL;
+
   p += strlen(prefix);
 
+  /* Avança até encontrar '{' */
   while (*p && *p != '{')
     p++;
+
   if (!*p)
     return NULL;
-  p++; // skip '{'
+
+  p++; /* pula '{' */
 
   const char *q = p;
   int depth = 1;
 
+  /* Encontra o '}' correspondente */
   while (*q && depth > 0)
   {
     if (*q == '{')
@@ -104,127 +119,145 @@ static char *extract_braced(const char *buf, const char *prefix)
   char *out = malloc(len + 1);
   memcpy(out, p, len);
   out[len] = '\0';
+
   return out;
 }
 
-static char **split_fds(const char *s, int *count)
+// Divide F={A->B,CD->E,...} em tokens ["A->B", "CD->E", ...]
+static char **splitFds(const char *s, int *outCount)
 {
-  int cap = 8;
-  char **arr = malloc(sizeof(char *) * cap);
-  *count = 0;
+  int capacity = 8;
+  char **array = malloc(sizeof(char *) * capacity);
+  *outCount = 0;
 
-  size_t n = strlen(s);
+  size_t length = strlen(s);
   size_t start = 0;
 
-  for (size_t i = 0; i <= n; ++i)
+  for (size_t i = 0; i <= length; ++i)
   {
     if (s[i] == ',' || s[i] == ';' || s[i] == '\0')
     {
-      size_t len = i - start;
+      size_t tokenLen = i - start;
 
-      while (len > 0 && isspace((unsigned char)s[start + len - 1]))
-        len--;
-      while (len > 0 && isspace((unsigned char)s[start]))
+      /* Remove espaços nos extremos */
+      while (tokenLen > 0 && isspace((unsigned char)s[start + tokenLen - 1]))
+        tokenLen--;
+      while (tokenLen > 0 && isspace((unsigned char)s[start]))
       {
         start++;
-        len--;
+        tokenLen--;
       }
 
-      if (len > 0)
+      if (tokenLen > 0)
       {
-        if (*count >= cap)
+        if (*outCount >= capacity)
         {
-          cap *= 2;
-          arr = realloc(arr, sizeof(char *) * cap);
+          capacity *= 2;
+          array = realloc(array, sizeof(char *) * capacity);
         }
 
-        char *tok = malloc(len + 1);
-        memcpy(tok, s + start, len);
-        tok[len] = '\0';
-        arr[(*count)++] = tok;
+        char *token = malloc(tokenLen + 1);
+        memcpy(token, s + start, tokenLen);
+        token[tokenLen] = '\0';
+
+        array[(*outCount)++] = token;
       }
 
       start = i + 1;
     }
   }
 
-  return arr;
+  return array;
 }
 
-static int parse_fd_token(const char *tok, attrset *lhs, attrset *rhs)
+// Converte um token "XY->Z" para lhs e rhs
+static int parseFdToken(const char *token, attrset *lhs, attrset *rhs)
 {
-  const char *arrow = strstr(tok, "->");
+  const char *arrow = strstr(token, "->");
   if (!arrow)
     return -1;
 
-  size_t lhs_len = arrow - tok;
-  size_t rhs_len = strlen(tok) - lhs_len - 2;
+  size_t lhsLen = arrow - token;
+  size_t rhsLen = strlen(token) - lhsLen - 2;
 
-  char *lhs_str = malloc(lhs_len + 1);
-  char *rhs_str = malloc(rhs_len + 1);
+  char *lhsStr = malloc(lhsLen + 1);
+  char *rhsStr = malloc(rhsLen + 1);
 
-  memcpy(lhs_str, tok, lhs_len);
-  lhs_str[lhs_len] = '\0';
+  memcpy(lhsStr, token, lhsLen);
+  lhsStr[lhsLen] = '\0';
 
-  memcpy(rhs_str, arrow + 2, rhs_len);
-  rhs_str[rhs_len] = '\0';
+  memcpy(rhsStr, arrow + 2, rhsLen);
+  rhsStr[rhsLen] = '\0';
 
-  *lhs = attrset_from_string(lhs_str);
-  *rhs = attrset_from_string(rhs_str);
+  *lhs = attrsetFromString(lhsStr);
+  *rhs = attrsetFromString(rhsStr);
 
-  free(lhs_str);
-  free(rhs_str);
+  free(lhsStr);
+  free(rhsStr);
+
   return 0;
 }
 
-FD *parse_fds_file(const char *path, attrset *out_U, int *out_nfds)
+/* ---------------------------------------------------------------
+   Função principal — lê arquivo e produz:
+      U (universo)
+      F (conjunto de FDs)
+---------------------------------------------------------------- */
+FD *parseFdsFile(const char *path, attrset *outU, int *outFdCount)
 {
-  char *buf = read_file(path);
-  if (!buf)
+  char *buffer = readFile(path);
+  if (!buffer)
   {
     fprintf(stderr, "Error: cannot read %s\n", path);
     return NULL;
   }
 
-  char *clean = strip_ws(buf);
-  free(buf);
+  char *clean = removeWhitespace(buffer);
+  free(buffer);
 
-  char *u_str = extract_braced(clean, "U=");
-  attrset U = u_str ? attrset_from_string(u_str) : 0;
-  free(u_str);
+  /* ------------------ Lê U={...} ------------------ */
+  char *universeString = extractBraced(clean, "U=");
+  attrset universe = universeString ? attrsetFromString(universeString) : 0;
+  free(universeString);
 
-  char *f_str = extract_braced(clean, "F=");
-  if (!f_str)
+  /* ------------------ Lê F={...} ------------------ */
+  char *fdsString = extractBraced(clean, "F=");
+  if (!fdsString)
   {
     fprintf(stderr, "Error: file missing F={...}\n");
     free(clean);
     return NULL;
   }
 
-  int count = 0;
-  char **tokens = split_fds(f_str, &count);
+  /* ------------------ Divide dependências ------------------ */
+  int tokenCount = 0;
+  char **tokens = splitFds(fdsString, &tokenCount);
 
-  FD *fds = malloc(sizeof(FD) * count);
-  int nfds = 0;
+  FD *fds = malloc(sizeof(FD) * tokenCount);
+  int fdCount = 0;
 
-  for (int i = 0; i < count; ++i)
+  for (int i = 0; i < tokenCount; ++i)
   {
-    attrset L, R;
-    if (parse_fd_token(tokens[i], &L, &R) == 0)
+    attrset lhs, rhs;
+
+    if (parseFdToken(tokens[i], &lhs, &rhs) == 0)
     {
-      fds[nfds].lhs = L;
-      fds[nfds].rhs = R;
-      nfds++;
-      U |= (L | R);
+      fds[fdCount].lhs = lhs;
+      fds[fdCount].rhs = rhs;
+      fdCount++;
+
+      universe |= (lhs | rhs);
     }
+
     free(tokens[i]);
   }
 
   free(tokens);
-  free(f_str);
+  free(fdsString);
   free(clean);
 
-  *out_U = U;
-  *out_nfds = nfds;
+  *outU = universe;
+  *outFdCount = fdCount;
+
   return fds;
 }

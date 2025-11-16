@@ -1,4 +1,3 @@
-
 #include "normalform.h"
 #include "mincover.h"
 #include "keys.h"
@@ -6,116 +5,140 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-static int is_subset(attrset A, attrset B)
+// Verifica se A está contido em B  (A ⊆ B)
+static int isSubset(attrset subset, attrset superset)
 {
-  return (A & B) == A;
+  return (subset & superset) == subset;
 }
 
-static void print_attrset(attrset s)
+// Imprime um conjunto de atributos (bitmask -> ABC...)
+static void printAttrset(attrset set)
 {
   for (int i = 0; i < 26; ++i)
-    if (s & (1u << i))
+    if (set & (1u << i))
       putchar('A' + i);
 }
 
-void check_normal_forms(attrset U, FD *fds, int nfds)
+// Verificação das Formas Normais (BCNF e 3NF)
+void checkNormalForms(attrset U, FD *fds, int fdCount)
 {
+  /* ---------------------------------------------------------
+     1) Gerar a cobertura mínima
+  --------------------------------------------------------- */
+  int minCount = 0;
+  FD *minCover = computeMinimumCover(fds, fdCount, &minCount);
 
-  int nmin = 0;
-  FD *min = computeMinimumCover(fds, nfds, &nmin);
-
-  if (nmin == 0)
+  if (minCount == 0)
   {
     printf("No functional dependencies given.\nBCNF: OK\n3NF: OK\n");
     return;
   }
 
-  int nkeys = 0;
-  attrset *keys = computeCandidateKeys(U, min, nmin, &nkeys);
+  /* ---------------------------------------------------------
+     2) Encontrar as chaves e os atributos primos
+  --------------------------------------------------------- */
+  int keyCount = 0;
+  attrset *candidateKeys = computeCandidateKeys(U, minCover, minCount, &keyCount);
 
-  attrset prime_attrs = 0;
-  for (int i = 0; i < nkeys; ++i)
-    prime_attrs |= keys[i];
+  attrset primeAttributes = 0;
+  for (int i = 0; i < keyCount; ++i)
+    primeAttributes |= candidateKeys[i];
 
-  int bcnf_ok = 1;
-  int bcnf_viol_count = 0;
+  /* ---------------------------------------------------------
+     3) Detectar violações de BCNF e 3NF
+  --------------------------------------------------------- */
+  int bcnfOk = 1, bcnfViolations = 0;
+  int nf3Ok = 1, nf3Violations = 0;
 
-  int nf3_ok = 1;
-  int nf3_viol_count = 0;
-
-  for (int i = 0; i < nmin; ++i)
+  for (int i = 0; i < minCount; ++i)
   {
-    attrset L = min[i].lhs;
-    attrset R = min[i].rhs;
+    attrset lhs = minCover[i].lhs;
+    attrset rhs = minCover[i].rhs;
 
-    if (is_subset(R, L))
+    /* Ignora dependências triviais */
+    if (isSubset(rhs, lhs))
       continue;
 
-    attrset Lplus = computeClosure(L, min, nmin);
-    int L_superkey = is_subset(U, Lplus);
-    int R_prime = is_subset(R, prime_attrs);
+    attrset lhsClosure = computeClosure(lhs, minCover, minCount);
+    int lhsIsSuperkey = isSubset(U, lhsClosure);
+    int rhsIsPrime = isSubset(rhs, primeAttributes);
 
-    if (!L_superkey)
-      bcnf_ok = 0, bcnf_viol_count++;
-    if (!L_superkey && !R_prime)
-      nf3_ok = 0, nf3_viol_count++;
+    if (!lhsIsSuperkey)
+    {
+      bcnfOk = 0;
+      bcnfViolations++;
+    }
+    if (!lhsIsSuperkey && !rhsIsPrime)
+    {
+      nf3Ok = 0;
+      nf3Violations++;
+    }
   }
 
-  if (bcnf_ok)
+  /* ---------------------------------------------------------
+     4) Impressão das violações de BCNF
+  --------------------------------------------------------- */
+  if (bcnfOk)
   {
     printf("BCNF: OK\n");
   }
   else
   {
-    printf("BCNF: Violations (%d)\n", bcnf_viol_count);
-    for (int i = 0; i < nmin; ++i)
-    {
-      attrset L = min[i].lhs;
-      attrset R = min[i].rhs;
+    printf("BCNF: Violations (%d)\n", bcnfViolations);
 
-      if (is_subset(R, L))
+    for (int i = 0; i < minCount; ++i)
+    {
+      attrset lhs = minCover[i].lhs;
+      attrset rhs = minCover[i].rhs;
+
+      if (isSubset(rhs, lhs))
         continue;
 
-      attrset Lplus = computeClosure(L, min, nmin);
-      if (!is_subset(U, Lplus))
+      attrset lhsClosure = computeClosure(lhs, minCover, minCount);
+
+      if (!isSubset(U, lhsClosure))
       {
-        print_attrset(L);
+        printAttrset(lhs);
         printf(" -> ");
-        print_attrset(R);
+        printAttrset(rhs);
         printf("   (LHS is not a superkey)\n");
       }
     }
   }
 
-  if (nf3_ok)
+  /* ---------------------------------------------------------
+     5) Impressão das violações de 3NF
+  --------------------------------------------------------- */
+  if (nf3Ok)
   {
     printf("3NF: OK\n");
   }
   else
   {
-    printf("3NF: Violations (%d)\n", nf3_viol_count);
-    for (int i = 0; i < nmin; ++i)
-    {
-      attrset L = min[i].lhs;
-      attrset R = min[i].rhs;
+    printf("3NF: Violations (%d)\n", nf3Violations);
 
-      if (is_subset(R, L))
+    for (int i = 0; i < minCount; ++i)
+    {
+      attrset lhs = minCover[i].lhs;
+      attrset rhs = minCover[i].rhs;
+
+      if (isSubset(rhs, lhs))
         continue;
 
-      attrset Lplus = computeClosure(L, min, nmin);
-      int L_superkey = is_subset(U, Lplus);
-      int R_prime = is_subset(R, prime_attrs);
+      attrset lhsClosure = computeClosure(lhs, minCover, minCount);
+      int lhsIsSuperkey = isSubset(U, lhsClosure);
+      int rhsIsPrime = isSubset(rhs, primeAttributes);
 
-      if (!L_superkey && !R_prime)
+      if (!lhsIsSuperkey && !rhsIsPrime)
       {
-        print_attrset(L);
+        printAttrset(lhs);
         printf(" -> ");
-        print_attrset(R);
+        printAttrset(rhs);
         printf("   (Not superkey AND RHS is not prime)\n");
       }
     }
   }
 
-  free(min);
-  free(keys);
+  free(minCover);
+  free(candidateKeys);
 }

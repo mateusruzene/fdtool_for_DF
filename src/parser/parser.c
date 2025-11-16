@@ -4,9 +4,6 @@
 #include <string.h>
 #include <ctype.h>
 
-// ---------------------------------------------------------
-// Convert character A..Z to index 0..25
-// ---------------------------------------------------------
 static int char_to_index(char c)
 {
   if (c >= 'A' && c <= 'Z')
@@ -16,9 +13,6 @@ static int char_to_index(char c)
   return -1;
 }
 
-// ---------------------------------------------------------
-// Convert string like "ABC" into bitmask
-// ---------------------------------------------------------
 attrset attrset_from_string(const char *s)
 {
   attrset result = 0;
@@ -31,9 +25,6 @@ attrset attrset_from_string(const char *s)
   return result;
 }
 
-// ---------------------------------------------------------
-// Print attribute set in compact form (ABC)
-// ---------------------------------------------------------
 void print_attrset_compact(attrset s)
 {
   for (int i = 0; i < 26; ++i)
@@ -43,9 +34,6 @@ void print_attrset_compact(attrset s)
   }
 }
 
-// ---------------------------------------------------------
-// Utility: read full file into memory
-// ---------------------------------------------------------
 static char *read_file(const char *path)
 {
   FILE *f = fopen(path, "rb");
@@ -69,9 +57,6 @@ static char *read_file(const char *path)
   return buf;
 }
 
-// ---------------------------------------------------------
-// Remove whitespace
-// ---------------------------------------------------------
 static char *strip_ws(const char *s)
 {
   size_t n = strlen(s);
@@ -86,9 +71,6 @@ static char *strip_ws(const char *s)
   return out;
 }
 
-// ---------------------------------------------------------
-// Extract text inside {...} after prefix (e.g., "U=" or "F=")
-// ---------------------------------------------------------
 static char *extract_braced(const char *buf, const char *prefix)
 {
   const char *p = strstr(buf, prefix);
@@ -125,9 +107,6 @@ static char *extract_braced(const char *buf, const char *prefix)
   return out;
 }
 
-// ---------------------------------------------------------
-// Split FDs inside { ... } using ',' or ';'
-// ---------------------------------------------------------
 static char **split_fds(const char *s, int *count)
 {
   int cap = 8;
@@ -172,9 +151,6 @@ static char **split_fds(const char *s, int *count)
   return arr;
 }
 
-// ---------------------------------------------------------
-// Parse LHS->RHS
-// ---------------------------------------------------------
 static int parse_fd_token(const char *tok, attrset *lhs, attrset *rhs)
 {
   const char *arrow = strstr(tok, "->");
@@ -201,9 +177,6 @@ static int parse_fd_token(const char *tok, attrset *lhs, attrset *rhs)
   return 0;
 }
 
-// ---------------------------------------------------------
-// FULL PARSER: loads U and F from .fds file
-// ---------------------------------------------------------
 FD *parse_fds_file(const char *path, attrset *out_U, int *out_nfds)
 {
   char *buf = read_file(path);

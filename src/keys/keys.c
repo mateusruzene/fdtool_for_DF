@@ -49,10 +49,7 @@ attrset *compute_candidate_keys(attrset U, FD *fds, int nfds, int *out_n)
         int w = 0;
         for (int i = 0; i < kcount; ++i)
         {
-          if ((keys[i] & cur) == cur)
-          {
-          }
-          else
+          if ((keys[i] & cur) != cur)
           {
             keys[w++] = keys[i];
           }

@@ -31,7 +31,7 @@ void check_normal_forms(attrset U, FD *fds, int nfds)
   }
 
   int nkeys = 0;
-  attrset *keys = compute_candidate_keys(U, min, nmin, &nkeys);
+  attrset *keys = computeCandidateKeys(U, min, nmin, &nkeys);
 
   attrset prime_attrs = 0;
   for (int i = 0; i < nkeys; ++i)

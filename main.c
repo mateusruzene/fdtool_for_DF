@@ -132,7 +132,7 @@ int main(int argc, char **argv)
     FD *min = compute_minimum_cover(fds, nfds, &nmin);
 
     int nkeys = 0;
-    attrset *keys = compute_candidate_keys(U, min, nmin, &nkeys);
+    attrset *keys = computeCandidateKeys(U, min, nmin, &nkeys);
 
     for (int i = 0; i < nkeys; ++i)
     {

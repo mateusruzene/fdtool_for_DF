@@ -3,115 +3,140 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-attrset *compute_candidate_keys(attrset U, FD *fds, int nfds, int *out_n)
+attrset *computeCandidateKeys(attrset universe, FD *fds, int fdCount, int *outCount)
 {
-  attrset all_rhs = 0;
-  for (int i = 0; i < nfds; ++i)
-    all_rhs |= fds[i].rhs;
+  attrset allRhsAttributes = 0;
+  for (int i = 0; i < fdCount; ++i)
+    allRhsAttributes |= fds[i].rhs;
 
-  attrset essentials = U & ~all_rhs;
-  attrset remaining = U & ~essentials;
+  attrset essentialAttributes = universe & ~allRhsAttributes;
+  attrset remainingAttributes = universe & ~essentialAttributes;
 
-  int qcap = 256;
-  attrset *queue = malloc(sizeof(attrset) * qcap);
-  int qhead = 0, qtail = 0;
+  int queueCapacity = 256;
+  attrset *queue = malloc(sizeof(attrset) * queueCapacity);
+  int queueHead = 0, queueTail = 0;
 
-  int vcap = 1024;
-  attrset *visited = malloc(sizeof(attrset) * vcap);
-  int vcount = 0;
+  int visitedCapacity = 1024;
+  attrset *visited = malloc(sizeof(attrset) * visitedCapacity);
+  int visitedCount = 0;
 
-  int kcap = 1024;
-  attrset *keys = malloc(sizeof(attrset) * kcap);
-  int kcount = 0;
+  int keyCapacity = 1024;
+  attrset *candidateKeys = malloc(sizeof(attrset) * keyCapacity);
+  int keyCount = 0;
 
-  queue[qtail++] = essentials;
-  visited[vcount++] = essentials;
+  /* Inicializa BFS com os atributos essenciais */
+  queue[queueTail++] = essentialAttributes;
+  visited[visitedCount++] = essentialAttributes;
 
-  while (qhead < qtail)
+  /* ------------------------------------------------------
+     BFS para gerar candidatos e testar minimalidade
+  ------------------------------------------------------ */
+  while (queueHead < queueTail)
   {
-    attrset cur = queue[qhead++];
+    attrset currentSet = queue[queueHead++];
+    attrset closureOfCurrent = computeClosure(currentSet, fds, fdCount);
 
-    attrset curplus = computeClosure(cur, fds, nfds);
-
-    if ((curplus & U) == U)
+    /* --------------------------------------------------
+       Se o fecho é superchave → possível chave candidata
+    -------------------------------------------------- */
+    if ((closureOfCurrent & universe) == universe)
     {
-      int minimal = 1;
-      for (int i = 0; i < kcount; ++i)
+      int isMinimal = 1;
+
+      /* Verifica se alguma chave existente é subconjunto da atual */
+      for (int i = 0; i < keyCount; ++i)
       {
-        if ((cur & keys[i]) == keys[i])
+        if ((currentSet & candidateKeys[i]) == candidateKeys[i])
         {
-          minimal = 0;
+          isMinimal = 0;
           break;
         }
       }
-      if (minimal)
-      {
-        int w = 0;
-        for (int i = 0; i < kcount; ++i)
-        {
-          if ((keys[i] & cur) != cur)
-          {
-            keys[w++] = keys[i];
-          }
-        }
-        kcount = w;
 
-        if (kcount + 1 >= kcap)
+      if (isMinimal)
+      {
+        /* Remove candidatos não minimal frente ao novo */
+        int w = 0;
+        for (int i = 0; i < keyCount; ++i)
         {
-          kcap *= 2;
-          keys = realloc(keys, sizeof(attrset) * kcap);
+          if ((candidateKeys[i] & currentSet) != currentSet)
+            candidateKeys[w++] = candidateKeys[i];
         }
-        keys[kcount++] = cur;
+        keyCount = w;
+
+        /* Adiciona a nova chave */
+        if (keyCount + 1 >= keyCapacity)
+        {
+          keyCapacity *= 2;
+          candidateKeys = realloc(candidateKeys, sizeof(attrset) * keyCapacity);
+        }
+
+        candidateKeys[keyCount++] = currentSet;
       }
+
       continue;
     }
 
+    /* --------------------------------------------------
+       Expande o conjunto tentando adicionar atributos restantes
+    -------------------------------------------------- */
     for (int b = 0; b < 26; ++b)
     {
       attrset bit = (1u << b);
-      if (!(remaining & bit))
+      if (!(remainingAttributes & bit))
         continue;
-      if (cur & bit)
+      if (currentSet & bit)
         continue;
 
-      attrset nxt = cur | bit;
+      attrset nextSet = currentSet | bit;
 
-      int seen = 0;
-      for (int i = 0; i < vcount; ++i)
-        if (visited[i] == nxt)
+      /* Verifica se já foi visitado */
+      int hasSeen = 0;
+      for (int i = 0; i < visitedCount; ++i)
+      {
+        if (visited[i] == nextSet)
         {
-          seen = 1;
+          hasSeen = 1;
           break;
         }
-      if (seen)
+      }
+
+      if (hasSeen)
         continue;
 
-      if (vcount + 1 >= vcap)
+      /* Registra como visitado */
+      if (visitedCount + 1 >= visitedCapacity)
       {
-        vcap *= 2;
-        visited = realloc(visited, sizeof(attrset) * vcap);
+        visitedCapacity *= 2;
+        visited = realloc(visited, sizeof(attrset) * visitedCapacity);
       }
-      visited[vcount++] = nxt;
+      visited[visitedCount++] = nextSet;
 
-      if (qtail + 1 >= qcap)
+      /* Adiciona à fila */
+      if (queueTail + 1 >= queueCapacity)
       {
-        qcap *= 2;
-        queue = realloc(queue, sizeof(attrset) * qcap);
+        queueCapacity *= 2;
+        queue = realloc(queue, sizeof(attrset) * queueCapacity);
       }
-      queue[qtail++] = nxt;
+      queue[queueTail++] = nextSet;
     }
   }
 
+  /* Limpeza de estruturas temporárias */
   free(queue);
   free(visited);
 
-  if (kcount == 0)
+  /* Não encontrou nenhuma chave? */
+  if (keyCount == 0)
   {
-    free(keys);
-    *out_n = 0;
+    free(candidateKeys);
+    *outCount = 0;
     return NULL;
   }
-  keys = realloc(keys, sizeof(attrset) * kcount);
-  *out_n = kcount;
-  return keys;
+
+  /* Ajusta tamanho final */
+  candidateKeys = realloc(candidateKeys, sizeof(attrset) * keyCount);
+  *outCount = keyCount;
+
+  return candidateKeys;
 }
